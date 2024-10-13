@@ -2,21 +2,21 @@
 (require typed/rackunit)
 
 ;;defining the Arith language
-(define-type AAQX3C (U numC plusC multC squareC))
+(define-type ArithC (U numC plusC multC squareC))
 
 (struct numC[(n : Real)] #:transparent)
-(struct plusC[(l : AAQX3C) (r : AAQX3C)] #:transparent)
-(struct multC[(l : AAQX3C) (r : AAQX3C)] #:transparent)
-(struct squareC[(n : AAQX3C)] #:transparent)
+(struct plusC[(l : ArithC) (r : ArithC)] #:transparent)
+(struct multC[(l : ArithC) (r : ArithC)] #:transparent)
+(struct squareC[(n : ArithC)] #:transparent)
 
-(define (interp [a : AAQX3C]) : Real
+(define (interp [a : ArithC]) : Real
   (match a
     [(numC n) n]
     [(plusC l r) (+ (interp l) (interp r))]
     [(multC l r) (* (interp l) (interp r))]
     [(squareC n) (expt (interp n) 2)]))
 
-(define (parse [prog : Sexp]) : AAQX3C
+(define (parse [prog : Sexp]) : ArithC
   (match prog
     [(? real? n) (numC n)]
     [(list '+ l r) (plusC (parse l) (parse r) )]
