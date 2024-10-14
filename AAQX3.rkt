@@ -2,14 +2,14 @@
 (require typed/rackunit)
 
 ;;defining the Arith language
-(define-type AAQX3C (U numC binopC squareC funDefC idC))
+(define-type AAQX3C (U numC binopC squareC funDefC idC appC))
 
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
 (struct squareC[(n : AAQX3C)] #:transparent)
 (struct funDefC [(name : Symbol) (args : (Listof Symbol)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
-(struct appC [(name : Symbol) (args : AAQX3C)] #:transparent)
+(struct appC [(name : Symbol) (args : (Listof AAQX3C))] #:transparent)
 
 (define n1 (numC 1))
 (define n2 (numC 2))
@@ -36,16 +36,39 @@
     '/ /
     '- -))
 
+;;defining list of functions
+(define fds : (Listof funDefC) '())
+
 ;;substs
-(define (subst [what : AAQX3C] [for : Symbol] [in : AAQX3C]) : AAQX3C
+(define (subst [subs : (Listof (List AAQX3C Symbol))] [in : AAQX3C]) : AAQX3C
   (match in
   [(numC n) in]
-  [(idC s) (cond
-             [(symbol=? s for) what]
-             [else in])]
-  [(appC n a) (appC n (subst what for a))]
-  [(binopC op l r) (binopC op (subst what for l)
-                      (subst what for r))]))
+  [(idC s) (subst-id s subs)]
+  ;;[(appC n a) (appC n (subst-single what for a))]
+  [(appC n a) (numC (interp (appC n (change-args subs a))))]
+  [(binopC op l r) (binopC op (subst subs l)
+                      (subst subs r))]))
+(define (change-args [subs : (Listof (List AAQX3C Symbol))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
+  (match args
+    ['() '()]
+    [(cons (? idC? id) r) (cons (subst-id (idC-name id) subs) (change-args subs r))]
+    [(cons other r) (cons other (change-args subs r))]))
+
+(define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof Symbol)]) : (Listof (List AAQX3C Symbol))
+  (cond
+    [(not (= (length l1) (length l2)))
+     (error 'zip "Number of variables and arguments do not match AAQX3")]
+    [(empty? l1) '()]
+      (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))))
+
+(define (subst-id [s : Symbol] [subs : (Listof (List AAQX3C Symbol))]) : AAQX3C
+  (match subs
+    ['() (error 'subst-id (format "AAQX3 found an unbound variable: ~a" s))] 
+    [(cons (list what for) rest)
+     (if (symbol=? s for) what
+         (subst-id s rest))]))
+
+
 
 ;;function
 (define (get-fundef [n : Symbol] [fds : (Listof funDefC)]) : funDefC
@@ -56,39 +79,44 @@
                    [else (get-fundef n (rest fds))])]))
 
 ;;interpret function
-(define (interp [a : AAQX3C] [fds : (Listof funDefC)]) : Real
+(define (interp [a : AAQX3C]) : Real
   (match a
     [(numC n) n]
-    [(binopC op l r) ((hash-ref op-table op) (interp l fds) (interp r fds))]
-    [(squareC n) (expt (interp n fds) 2)]
+    [(binopC op l r) ((hash-ref op-table op) (interp l) (interp r))]
+    [(squareC n) (expt (interp n) 2)]
     [(appC f a) (local ([define fd (get-fundef f fds)])
-              (interp (subst a
-                             (funDefC-args fd)
-                             (funDefC-body fd))
-                      fds))]
+              (interp (subst (zip a (funDefC-args fd))
+                             (funDefC-body fd))))]
     [(idC _) (error 'interp "AAQZ shouldn't get here")]))
- 
+
+
+
 ;;interp test cases
-(check-equal? (interp n1 '()) 1)
-(check-equal? (interp p1 '()) 3)
-(check-equal? (interp m2 '()) 12)
-(check-equal? (interp s1 '()) 4)
+(check-equal? (interp n1 ) 1)
+(check-equal? (interp p1 ) 3)
+(check-equal? (interp m2 ) 12)
+(check-equal? (interp s1 ) 4)
   
 ;;parser
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
+    [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
-    [(list 'def (? symbol? name) '=> body) (funDefC name '() (parse body))]
-    [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body) (funDefC name (cast args (Listof Symbol)) (parse body))]
+    [(list 'def (? symbol? name) '() '=> body) (funDefC name '() (parse body))]
+    [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body)
+     (set! fds (cons (funDefC name (cast args (Listof Symbol)) (parse body)) fds))
+     (first fds)]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          (error 'parse "Unsupported operator in AAQZ: ~a" op))]
-    [(list '^2 n) (squareC (parse n))]
+    [(list (? symbol? f) args ...) (appC f (map parse args))]
     [other (error 'parse "syntax error in AAQZ, got ~e" other)]))
 
 ;;parse test cases
+
+
 
 (check-equal? (parse '5)
              (numC 5))
@@ -109,7 +137,7 @@
                                      (+ x 1)})
               (funDefC 'addOne '(x) (binopC '+ (idC 'x) (numC 1))))
 
-(check-equal? (parse '{def oneAddOne =>
+(check-equal? (parse '{def oneAddOne () =>
                                      (+ 1 1)})
               (funDefC 'oneAddOne '() (binopC '+ (numC '1) (numC 1))))
 
@@ -117,11 +145,9 @@
                                        (* w h)})
                      (funDefC 'area '(w h) (binopC '* (idC 'w) (idC 'h))))
 
+(check-equal? (parse '{def addOne (x) =>
+                                     (+ x 1)})
+              (funDefC 'addOne '(x) (binopC '+ (idC 'x) (numC 1))))
 
-
-
-
-
-
-
+(check-equal? (interp (parse'(addOne 2))) 3)
 
