@@ -1,15 +1,15 @@
 #lang typed/racket
 (require typed/rackunit)
 
-;;defining the Arith language
+;;defining the AAQX3C language
 (define-type AAQX3C (U numC binopC squareC funDefC idC appC))
 
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
 (struct squareC[(n : AAQX3C)] #:transparent)
-(struct funDefC [(name : Symbol) (args : (Listof Symbol)) (body : AAQX3C)] #:transparent)
+(struct funDefC [(name : idC) (args : (Listof idC)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
-(struct appC [(name : Symbol) (args : (Listof AAQX3C))] #:transparent)
+(struct appC [(name : idC) (args : (Listof AAQX3C))] #:transparent)
 
 (define n1 (numC 1))
 (define n2 (numC 2))
@@ -40,7 +40,7 @@
 (define fds : (Listof funDefC) '())
 
 ;;substs
-(define (subst [subs : (Listof (List AAQX3C Symbol))] [in : AAQX3C]) : AAQX3C
+(define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C]) : AAQX3C
   (match in
   [(numC n) in]
   [(idC s) (subst-id s subs)]
@@ -48,30 +48,40 @@
   [(appC n a) (numC (interp (appC n (change-args subs a))))]
   [(binopC op l r) (binopC op (subst subs l)
                       (subst subs r))]))
-(define (change-args [subs : (Listof (List AAQX3C Symbol))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
+
+
+(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
   (match args
     ['() '()]
     [(cons (? idC? id) r) (cons (subst-id (idC-name id) subs) (change-args subs r))]
     [(cons other r) (cons other (change-args subs r))]))
 
-(define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof Symbol)]) : (Listof (List AAQX3C Symbol))
+
+(define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof AAQX3C)]) : (Listof (Listof AAQX3C))
   (cond
     [(not (= (length l1) (length l2)))
      (error 'zip "Number of variables and arguments do not match AAQX3")]
     [(empty? l1) '()]
       (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))))
 
-(define (subst-id [s : Symbol] [subs : (Listof (List AAQX3C Symbol))]) : AAQX3C
+(define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
+  (equal? arg1 arg2))
+
+(define (subst-id [s : Symbol] [subs : (Listof (Listof AAQX3C))]) : AAQX3C
   (match subs
     ['() (error 'subst-id (format "AAQX3 found an unbound variable: ~a" s))] 
     [(cons (list what for) rest)
-     (if (symbol=? s for) what
-         (subst-id s rest))]))
+     (match for
+        [(idC name)
+          (if (symbol=? s name)
+              what ;;what is a numC? and for is a idC?
+             (subst-id s rest))]
+        [other (error 'subst-id "expected idC in subst-id for AAQZ, got ~e" other)])]))
 
 
 
 ;;function
-(define (get-fundef [n : Symbol] [fds : (Listof funDefC)]) : funDefC
+(define (get-fundef [n : idC] [fds : (Listof funDefC)]) : funDefC
   (cond
     [(empty? fds) (error 'get-fundef "reference to undefined function AAQZ")]
     [(cons? fds) (cond
@@ -103,15 +113,16 @@
     [(? real? n) (numC n)]
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
+    [(list (? symbol? s) (list (? symbol? args) ...)) (appC (parse s) (map parse args))]
     [(list 'def (? symbol? name) '() '=> body) (funDefC name '() (parse body))]
     [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body)
-     (set! fds (cons (funDefC name (cast args (Listof Symbol)) (parse body)) fds))
+     (set! fds (cons (funDefC (parse name) (map parse args) (parse body)) fds))
      (first fds)]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          (error 'parse "Unsupported operator in AAQZ: ~a" op))]
-    [(list (? symbol? f) args ...) (appC f (map parse args))]
+    ;;[(list (? symbol? f) args ...) (appC (parse f) (map parse args))]
     [other (error 'parse "syntax error in AAQZ, got ~e" other)]))
 
 ;;parse test cases
@@ -131,7 +142,11 @@
                      (binopC '+ (numC 2) (numC 3))
                      (numC 5)))
 (check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
-(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
+
+(check-equal? (parse '{+ 3})
+             (numC 5))
+
+;;(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
 
 (check-equal? (parse '{def addOne (x) =>
                                      (+ x 1)})
