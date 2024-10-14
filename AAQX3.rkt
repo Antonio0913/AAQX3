@@ -114,7 +114,7 @@
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
     [(list (? symbol? s) (list (? symbol? args) ...)) (appC (parse s) (map parse args))]
-    [(list 'def (? symbol? name) '() '=> body) (funDefC name '() (parse body))]
+    [(list 'def (? symbol? name) '() '=> body) (funDefC (parse name) '() (parse body))]
     [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body)
      (set! fds (cons (funDefC (parse name) (map parse args) (parse body)) fds))
      (first fds)]
