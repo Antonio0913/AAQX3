@@ -109,7 +109,7 @@
   
 ;;parser
 
-(define (parse-prog [progs : Sexp])
+(define (parse-prog [progs : Sexp]) : (Listof funDefC)
   (match progs
     ['() '()]
     [(cons prog rest)
@@ -171,6 +171,5 @@
 
 (check-equal? (interp (parse'(addOne 2))) 3)
 
-{{def f {(x y) => {+ x y}}}
-                     {def main {() => {f 1 2}}}}
+
 
