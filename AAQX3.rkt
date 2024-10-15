@@ -106,8 +106,8 @@
 (check-equal? (interp p1 '()) 3)
 (check-equal? (interp m2 '()) 12)
 (check-equal? (interp s1 '()) 4)
-  
-;;parser
+   
+;;parser 
 
 (define (parse-prog [progs : Sexp]) : (Listof funDefC)
   (match progs
@@ -126,7 +126,7 @@
     [(? real? n) (numC n)]
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
-    [(list (? symbol? s) (list args ...)) (appC (idC s) (map parse args))]
+    [(list (? symbol? s) args ...) (appC (idC s) (map parse args))]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
@@ -162,11 +162,11 @@
               (funDefC (idC 'oneAddOne) '() (binopC '+ (numC '1) (numC 1))))
 
 (check-equal? (parse-prog '{{def area (w h) =>
-                                       (* w h)} ()})
+                                       (* w h)} })
                      (list (funDefC (idC 'area) (list (idC 'w) (idC 'h)) (binopC '* (idC 'w) (idC 'h)))))
 
 (check-equal? (parse-prog '{{def addOne (x) =>
-                                     (+ x 1)} ()})
+                                     (+ x 1)} })
               (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1)))))
 
 (check-equal? (interp (parse '(addOne 2)) (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1))))) 3)
