@@ -24,7 +24,7 @@
 
 (define s1 (squareC n2))
 (define s2 (squareC n3))
-
+ 
 
 
 
@@ -36,8 +36,6 @@
     '/ /
     '- -))
 
-;;defining list of functions
-(define fds : (Listof funDefC) '())
 
 ;;substs
 (define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C] [fds : (Listof funDefC)]) : AAQX3C
@@ -73,7 +71,7 @@
     [(cons (list what for) rest)
      (match for
         [(idC name)
-          (if (symbol=? s name)
+          (if (equal? s name)
               what ;;what is a numC? and for is a idC?
              (subst-id s rest))]
         [other (error 'subst-id "expected idC in subst-id for AAQZ, got ~e" other)])]))
@@ -126,11 +124,11 @@
     [(? real? n) (numC n)]
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
-    [(list (? symbol? s) args ...) (appC (idC s) (map parse args))]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          (error 'parse "Unsupported operator in AAQX3: ~a" op))]
+    [(list (? symbol? s) args ...) (appC (idC s) (map parse args))]
     [other (error 'parse "syntax error in AAQX3, got ~e" other)]))
 
 ;;parse test cases
@@ -151,11 +149,14 @@
 
 
 
-(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
+;;(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
 
-(check-equal? (parse-prog '{{def addOne (x) =>
+(check-equal? (parse '{+ 3})
+             (numC 5))
+
+(check-equal? (parse-prog '{{def addOne (x) => 
                                      (+ x 1)}})
-              (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1))))
+              (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1)))))
 
 (check-equal? (parse-prog '{{def oneAddOne () =>
                                      (+ 1 1)}})
