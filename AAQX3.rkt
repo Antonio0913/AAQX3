@@ -7,7 +7,7 @@
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
 (struct squareC[(n : AAQX3C)] #:transparent)
-(struct funDefC [(name : idC) (args : (Listof AAQX3C)) (body : AAQX3C)] #:transparent)
+(struct funDefC [(name : idC) (args : (Listof idC)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
 (struct appC [(name : idC) (args : (Listof AAQX3C))] #:transparent)
 
@@ -40,14 +40,14 @@
 (define fds : (Listof funDefC) '())
 
 ;;substs
-(define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C]) : AAQX3C
+(define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C] [fds : (Listof funDefC)]) : AAQX3C
   (match in
   [(numC n) in]
   [(idC s) (subst-id s subs)]
   ;;[(appC n a) (appC n (subst-single what for a))]
-  [(appC n a) (numC (interp (appC n (change-args subs a))))]
-  [(binopC op l r) (binopC op (subst subs l)
-                      (subst subs r))]))
+  [(appC n a) (numC (interp (appC n (change-args subs a)) fds))]
+  [(binopC op l r) (binopC op (subst subs l fds)
+                      (subst subs r fds))]))
 
 
 (define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
@@ -92,20 +92,20 @@
 (define (interp [a : AAQX3C] [fds : (Listof funDefC)]) : Real
   (match a
     [(numC n) n]
-    [(binopC op l r) ((hash-ref op-table op) (interp l) (interp r))]
-    [(squareC n) (expt (interp n) 2)]
+    [(binopC op l r) ((hash-ref op-table op) (interp l fds) (interp r fds))]
+    [(squareC n) (expt (interp n fds) 2)]
     [(appC f a) (local ([define fd (get-fundef f fds)])
               (interp (subst (zip a (funDefC-args fd))
-                             (funDefC-body fd))))]
-    [(idC _) (error 'interp "AAQZ shouldn't get here")]))
+                             (funDefC-body fd) fds) fds))]
+    [(idC _) (error 'interp "AAQX3 shouldn't get here")]))
 
 
 
 ;;interp test cases
-(check-equal? (interp n1 ) 1)
-(check-equal? (interp p1 ) 3)
-(check-equal? (interp m2 ) 12)
-(check-equal? (interp s1 ) 4)
+(check-equal? (interp n1 '()) 1)
+(check-equal? (interp p1 '()) 3)
+(check-equal? (interp m2 '()) 12)
+(check-equal? (interp s1 '()) 4)
   
 ;;parser
 
@@ -113,24 +113,25 @@
   (match progs
     ['() '()]
     [(cons prog rest)
-     (if (and (list? prog) (equal? (first prog) 'def))
-         (cons (parse prog) (parse-prog rest))
-         (error "AAQX3 Expected 'def' but found something else"))]))
+     (match prog
+       [(list 'def (? symbol? name) '() '=> body) (cons (funDefC (idC name) '() (parse body)) (parse-prog rest))]
+       [(list 'def (? symbol? name) (list args ...) '=> body)
+        (if (andmap symbol? args) (cons (funDefC (idC name) (map idC args) (parse body)) (parse-prog rest))
+             (error 'parse "AAQX3 Expected a list of symbols for arguments"))]
+       [_ (error "AAQX3 Expected 'def' with correct syntax but found something else")])]  
+    [_ (error "AAQX3 Invalid program format")])) 
 
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
-    [(list (? symbol? s) (list (? symbol? args) ...)) (appC (parse s) (map parse args))]
-    [(list 'def (? symbol? name) '() '=> body) (funDefC (parse name) '() (parse body))]
-    [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body)
-     (cons (funDefC (idC name) (map parse args) (parse body)) fds)]
+    [(list (? symbol? s) (list args ...)) (appC (idC s) (map parse args))]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
-         (error 'parse "Unsupported operator in AAQZ: ~a" op))]
-    [other (error 'parse "syntax error in AAQZ, got ~e" other)]))
+         (error 'parse "Unsupported operator in AAQX3: ~a" op))]
+    [other (error 'parse "syntax error in AAQX3, got ~e" other)]))
 
 ;;parse test cases
 
@@ -148,28 +149,27 @@
                      (numC 5)))
 (check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
 
-(check-equal? (parse '{+ 3})
-             (numC 5))
 
-;;(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
 
-(check-equal? (parse '{def addOne (x) =>
-                                     (+ x 1)})
-              (funDefC 'addOne '(x) (binopC '+ (idC 'x) (numC 1))))
+(check-exn #rx"syntax error" (lambda () (parse '{+ 3})))
 
-(check-equal? (parse '{def oneAddOne () =>
-                                     (+ 1 1)})
-              (funDefC 'oneAddOne '() (binopC '+ (numC '1) (numC 1))))
+(check-equal? (parse-prog '{{def addOne (x) =>
+                                     (+ x 1)}})
+              (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1))))
 
-(check-equal? (parse '{def area (w h) =>
-                                       (* w h)})
-                     (funDefC 'area '(w h) (binopC '* (idC 'w) (idC 'h))))
+(check-equal? (parse-prog '{{def oneAddOne () =>
+                                     (+ 1 1)}})
+              (funDefC (idC 'oneAddOne) '() (binopC '+ (numC '1) (numC 1))))
 
-(check-equal? (parse '{def addOne (x) =>
-                                     (+ x 1)})
-              (funDefC 'addOne '(x) (binopC '+ (idC 'x) (numC 1))))
+(check-equal? (parse-prog '{{def area (w h) =>
+                                       (* w h)} ()})
+                     (list (funDefC (idC 'area) (list (idC 'w) (idC 'h)) (binopC '* (idC 'w) (idC 'h)))))
 
-(check-equal? (interp (parse'(addOne 2))) 3)
+(check-equal? (parse-prog '{{def addOne (x) =>
+                                     (+ x 1)} ()})
+              (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1)))))
+
+(check-equal? (interp (parse '(addOne 2)) (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1))))) 3)
 
 
 
