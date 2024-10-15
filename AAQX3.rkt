@@ -7,7 +7,7 @@
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
 (struct squareC[(n : AAQX3C)] #:transparent)
-(struct funDefC [(name : idC) (args : (Listof idC)) (body : AAQX3C)] #:transparent)
+(struct funDefC [(name : idC) (args : (Listof AAQX3C)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
 (struct appC [(name : idC) (args : (Listof AAQX3C))] #:transparent)
 
@@ -89,7 +89,7 @@
                    [else (get-fundef n (rest fds))])]))
 
 ;;interpret function
-(define (interp [a : AAQX3C]) : Real
+(define (interp [a : AAQX3C] [fds : (Listof funDefC)]) : Real
   (match a
     [(numC n) n]
     [(binopC op l r) ((hash-ref op-table op) (interp l) (interp r))]
@@ -108,6 +108,15 @@
 (check-equal? (interp s1 ) 4)
   
 ;;parser
+
+(define (parse-prog [progs : Sexp])
+  (match progs
+    ['() '()]
+    [(cons prog rest)
+     (if (and (list? prog) (equal? (first prog) 'def))
+         (cons (parse prog) (parse-prog rest))
+         (error "AAQX3 Expected 'def' but found something else"))]))
+
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
@@ -116,18 +125,14 @@
     [(list (? symbol? s) (list (? symbol? args) ...)) (appC (parse s) (map parse args))]
     [(list 'def (? symbol? name) '() '=> body) (funDefC (parse name) '() (parse body))]
     [(list 'def (? symbol? name) (list (? symbol? args) ...) '=> body)
-     (set! fds (cons (funDefC (parse name) (map parse args) (parse body)) fds))
-     (first fds)]
+     (cons (funDefC (idC name) (map parse args) (parse body)) fds)]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          (error 'parse "Unsupported operator in AAQZ: ~a" op))]
-    ;;[(list (? symbol? f) args ...) (appC (parse f) (map parse args))]
     [other (error 'parse "syntax error in AAQZ, got ~e" other)]))
 
 ;;parse test cases
-
-
 
 (check-equal? (parse '5)
              (numC 5))
@@ -165,4 +170,7 @@
               (funDefC 'addOne '(x) (binopC '+ (idC 'x) (numC 1))))
 
 (check-equal? (interp (parse'(addOne 2))) 3)
+
+{{def f {(x y) => {+ x y}}}
+                     {def main {() => {f 1 2}}}}
 
