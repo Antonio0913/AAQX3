@@ -41,7 +41,7 @@
 (define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C] [fds : (Listof funDefC)]) : AAQX3C
   (match in
   [(numC n) in]
-  [(idC s) (subst-id s subs)]
+  [(idC s) (subst-id in subs)]
   ;;[(appC n a) (appC n (subst-single what for a))]
   [(appC n a) (numC (interp (appC n (change-args subs a)) fds))]
   [(binopC op l r) (binopC op (subst subs l fds)
@@ -51,7 +51,7 @@
 (define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
   (match args
     ['() '()]
-    [(cons (? idC? id) r) (cons (subst-id (idC-name id) subs) (change-args subs r))]
+    [(cons (? idC? id) r) (cons (subst-id id subs) (change-args subs r))]
     [(cons other r) (cons other (change-args subs r))]))
 
 
@@ -65,16 +65,11 @@
 (define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
   (equal? arg1 arg2))
 
-(define (subst-id [s : Symbol] [subs : (Listof (Listof AAQX3C))]) : AAQX3C
+(define (subst-id [s : idC] [subs : (Listof (Listof AAQX3C))]) : AAQX3C
   (match subs
-    ['() (error 'subst-id (format "AAQX3 found an unbound variable: ~a" s))] 
-    [(cons (list what for) rest)
-     (match for
-        [(idC name)
-          (if (equal? s name)
-              what ;;what is a numC? and for is a idC?
-             (subst-id s rest))]
-        [other (error 'subst-id "expected idC in subst-id for AAQZ, got ~e" other)])]))
+    ['() (error 'subst-id (format "AAQX3 found an unbound variable: ~a" s))]
+    [(cons (list what (? idC? for)) rest) what]
+    [(cons _ rest) (subst-id s rest)]))
 
 
 
@@ -155,7 +150,7 @@
              (numC 5))
 
 (check-equal? (parse-prog '{{def addOne (x) => 
-                                     (+ x 1)}})
+                                     (+ x 1)}}) 
               (list (funDefC (idC 'addOne) (list (idC 'x)) (binopC '+ (idC 'x) (numC 1)))))
 
 (check-equal? (parse-prog '{{def oneAddOne () =>
