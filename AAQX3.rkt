@@ -47,12 +47,13 @@
   [(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
   [(binopC op l r) (binopC op (subst subs l fds)
                       (subst subs r fds))]))
- 
+  
 
 (define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
-  (match args
+  (match args 
     ['() '()]
     [(cons (? idC? id) r) (cons (subst-id id subs fds) (change-args subs r fds))]
+    [(cons (? appC? app) r) (cons (subst subs app fds) (change-args subs r fds))]
     [(cons other r) (cons other (change-args subs r fds))]))
 
 
@@ -80,11 +81,11 @@
 
 ;;function
 (define (get-fundef [n : idC] [fds : (Listof funDefC)]) : funDefC
-  (match
+  (match fds
     ['() (error 'get-fundef "reference to undefined function AAQZ: ~a" n)]
-    [(cons f ) (cond
-                   [(equal? n (funDefC-name (first fds))) (first fds)]
-                   [else (get-fundef n (rest fds))])]))
+    [(cons first-fd rest-fds) (cond
+                   [(equal? n (funDefC-name first-fd)) first-fd]
+                   [else (get-fundef n rest-fds)])]))
 
 ;;interpret function
 (define (interp [a : AAQX3C] [fds : (Listof funDefC)]) : Real
@@ -181,11 +182,16 @@
 
 
 (check-equal? (interp (parse
-                      '(addFunction 2 addOne))
+                      '(addFunction 2 (addOne 2) 1))
                       (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
-                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'callFunc)) {binopC '+ {idC 'num} {appC {idC 'callFunc} {list {idC 'num}}}}))) 5)
+                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'num2) (idC 'num1)) {binopC '+ {idC 'num1} {binopC '+ {idC 'num} {idC 'num2}}}))) 6)
 
- 
+(check-equal? (interp (parse
+                      '(addOne (addFunction 2 1)))
+                      (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
+                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'num1)) {binopC '+ {idC 'num1} {idC 'num}}))) 4)
+
+  
 
 
 
