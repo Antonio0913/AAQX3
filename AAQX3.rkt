@@ -55,14 +55,14 @@
     [(cons (? appC? app) r) (cons (subst subs app fds) (change-args subs r fds))]
     [(cons other r) (cons other (change-args subs r fds))]))
 
-
+ 
 
 
 (define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof AAQX3C)]) : (Listof (Listof AAQX3C))
-  (cond
-    [(not (equal? (length l1) (length l2))) (error 'zip "Number of variables and arguments do not match AAQX3")]
-    [(empty? l1) '()]
-    [else (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))]))
+  (match (list l1 l2)
+    [(list '() '()) '()]
+    [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
+    [other (error 'zip "Number of variables and arguments do not match AAQX3")]))
 
 #;(define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
   (equal? arg1 arg2))
@@ -138,7 +138,7 @@
   (match progs
     ['() '()]
     [(cons prog rest)
-     (check-duplicate (parse-fundef prog) (parse-prog rest))]))
+     (check-duplicate-func (parse-fundef prog) (parse-prog rest))]))
      #;(match prog
        [(list 'def (? symbol? name) '() '=> body) (cons (funDefC (idC name) '() (parse body)) (parse-prog rest))]
        [(list 'def (? symbol? name) (list args ...) '=> body)
@@ -149,14 +149,21 @@
 
 ;;takes in a function and a list of function and check if its a repeated name
 
-(define (check-duplicate [new : funDefC] [existing : (Listof funDefC)]) : (Listof funDefC)
+(define (check-duplicate-func [new : funDefC] [existing : (Listof funDefC)]) : (Listof funDefC)
   (printf "Function definitions (funs): ~a\n" existing)
   (match existing
     ['() (cons new existing)]
     [(cons func rest)
      (if (equal? (funDefC-name new) (funDefC-name func))
-                          (error "AAQZ3 found a syntax error repeated function name\n") (cons func (check-duplicate new rest)))]))
+         (error "AAQZ3 found a syntax error repeated function name\n") (cons func (check-duplicate-func new rest)))]))
 
+(define (check-duplicate-arg [new : idC] [existing : (Listof idC)]) : (Listof idC)
+  (printf "Function definitions (funs): ~a\n" existing)
+  (match existing
+    ['() (cons new existing)]
+    [(cons arg rest)
+     (if (equal? new arg)
+         (error "AAQZ3 found a syntax error repeated function name\n") (cons arg (check-duplicate-arg new rest)))]))
 
  
 
@@ -165,8 +172,7 @@
     [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
     [(list 'def (? symbol? name) (list (list args ...) '=> body)) 
         (if (andmap symbol? args)  (funDefC (idC name) (map idC args) (parse body))
-             (error 'parse "AAQX3 Expected a list of symbols for arguments"))])
-  )
+             (error 'parse "AAQX3 Expected a list of symbols for arguments"))]))
 
 ;;
 (define (op-in-table? [op : Symbol]) : Boolean
@@ -178,6 +184,7 @@
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
     [(list 'ifleq0? test then else) (ifleq0? (parse test) (parse then) (parse else))]
+
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
