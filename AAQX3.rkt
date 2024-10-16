@@ -86,7 +86,7 @@
 ;;function
 (define (get-fundef [n : idC] [fds : (Listof funDefC)]) : funDefC
   (cond
-    [(empty? fds) (error 'get-fundef "reference to undefined function AAQZ")]
+    [(empty? fds) (error 'get-fundef "reference to undefined function AAQZ: ~a" n)]
     [(cons? fds) (cond
                    [(equal? n (funDefC-name (first fds))) (first fds)]
                    [else (get-fundef n (rest fds))])]))
@@ -124,6 +124,10 @@
        [_ (error "AAQX3 Expected 'def' with correct syntax but found something else")])]  
     [_ (error "AAQX3 Invalid program format")])) 
 
+;;
+(define (op-in-table? [op : Symbol]) : Boolean
+  (hash-has-key? op-table op))
+
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
@@ -132,7 +136,8 @@
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
-         (error 'parse "Unsupported operator in AAQX3: ~a" op))]
+         ;(error 'parse "Unsupported operator in AAQX3: ~a" op)
+         (appC (idC op) (list (parse l) (parse r))))]
     [(list (? symbol? s) args ...)
      (if (hash-has-key? op-table s)
          (error 'parse "Incorrect binop syntax: ~a in AAQX3" prog)
@@ -154,9 +159,9 @@
               (binopC '*
                      (binopC '+ (numC 2) (numC 3))
                      (numC 5)))
-(check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
+;(check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
 
-
+ 
 
 (check-exn #rx"Incorrect binop syntax:" (lambda () (parse '{+ 3})))
 
@@ -183,7 +188,7 @@
 (check-equal? (interp (parse
                       '(addFunction 2 addOne))
                       (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
-                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'callFunc)) {binopC '+ {idC 'num} {appC {idC 'callFunc}{list {idC 'num}}}}))) 5)
+                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'callFunc)) {binopC '+ {idC 'num} {appC {idC 'callFunc} {list {idC 'num}}}}))) 5)
 
  
 
