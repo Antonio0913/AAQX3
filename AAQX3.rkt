@@ -124,7 +124,7 @@
   (match progs
     ['() '()]
     [(cons prog rest)
-     (cons (parse-fundef prog) (parse-prog rest))]))
+     (check-duplicate (parse-fundef prog) (parse-prog rest))]))
      #;(match prog
        [(list 'def (? symbol? name) '() '=> body) (cons (funDefC (idC name) '() (parse body)) (parse-prog rest))]
        [(list 'def (? symbol? name) (list args ...) '=> body)
@@ -133,6 +133,13 @@
        [_ (error "AAQX3 Expected 'def' with correct syntax but found something else")])  
     ;;[_ (error "AAQX3 Invalid program format")]
 
+;;takes in a function and a list of function and check if its a repeated name
+(define (check-duplicate [new : funDefC] [existing : (Listof funDefC)]) : (Listof funDefC)
+  (match existing
+    ['() (cons new '())]
+    [(cons func rest)
+     (if (equal? (funDefC-name new) (funDefC-name func))
+                          (error "AAQZ3 found a syntax error repeated function name\n") (check-duplicate func rest))]))
 
 (define (parse-fundef [prog : Sexp]) : funDefC
   (match prog
@@ -188,11 +195,15 @@
        (parse-prog '{{def f {(x y) => {+ x y}}}
                      {def main {() => {f 1 2}}}}))
       3)
+
  (check-equal? (interp-fns
         (parse-prog '{{def f {() => 5}}
                       {def main {() => {+ {f} {f}}}}}))
        10)
 
-
-
+ (check-equal? (interp-fns
+        (parse-prog '{{def f {() => 5}}
+                      {def f {() => 5}}
+                      {def main {() => {+ {f} {f}}}}}))
+       10)
 
