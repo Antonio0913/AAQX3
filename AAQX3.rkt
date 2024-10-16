@@ -42,26 +42,21 @@
 (define (subst [subs : (Listof (Listof AAQX3C))] [in : AAQX3C] [fds : (Listof funDefC)]) : AAQX3C
   (match in
   [(numC n) in]
-  [(idC s) (subst-id in subs)] ;;if it finds an idC it calls subst-id then just stops?
+  [(idC s) (subst-id in subs fds)] ;;if it finds an idC it calls subst-id then just stops?
   ;;[(appC n a) (appC n (subst-single what for a))]
-  [(appC n a) (numC (interp (appC n (change-args subs a)) fds))]
+  [(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
   [(binopC op l r) (binopC op (subst subs l fds)
                       (subst subs r fds))]))
  
 
-(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)]) : (Listof AAQX3C)
+(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
   (match args
     ['() '()]
-    [(cons (? idC? id) r) (cons (subst-id id subs) (change-args subs r))]
-    [(cons other r) (cons other (change-args subs r))]))
+    [(cons (? idC? id) r) (cons (subst-id id subs fds) (change-args subs r fds))]
+    [(cons other r) (cons other (change-args subs r fds))]))
 
 
-;(define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof AAQX3C)]) : (Listof (Listof AAQX3C))
-;  (cond
-;    [(not (= (length l1) (length l2)))
-;     (error 'zip "Number of variables and arguments do not match AAQX3")]
-;    [(empty? l1) '()]
-;      (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))))
+
 
 (define (zip [l1 : (Listof AAQX3C)] [l2 : (Listof AAQX3C)]) : (Listof (Listof AAQX3C))
   (cond
@@ -72,22 +67,22 @@
 (define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
   (equal? arg1 arg2))
  
-(define (subst-id [s : idC] [subs : (Listof (Listof AAQX3C))]) : AAQX3C
+(define (subst-id [s : idC] [subs : (Listof (Listof AAQX3C))] [fds : (Listof funDefC)]) : AAQX3C
   (match subs
     ['() (error 'subst-id (format "AAQX3 found an unbound variable: ~a" s))]
     [(cons (list what (? idC? for)) rest)
      (if (equal? s for)
-         what
-         (subst-id s rest))] ;;isnt this needed?
-    [(cons _ rest) (subst-id s rest)]))
+         (numC (interp what fds))
+         (subst-id s rest fds))]
+    [(cons _ rest) (subst-id s rest fds)]))
 
 
 
 ;;function
 (define (get-fundef [n : idC] [fds : (Listof funDefC)]) : funDefC
-  (cond
-    [(empty? fds) (error 'get-fundef "reference to undefined function AAQZ: ~a" n)]
-    [(cons? fds) (cond
+  (match
+    ['() (error 'get-fundef "reference to undefined function AAQZ: ~a" n)]
+    [(cons f ) (cond
                    [(equal? n (funDefC-name (first fds))) (first fds)]
                    [else (get-fundef n (rest fds))])]))
 
@@ -176,7 +171,7 @@
 
 (check-equal? (parse-prog '{{def area (w h) =>
                                        (* w h)} })
-                     (list (funDefC (idC 'area) (list (idC 'w) (idC 'h)) (binopC '* (idC 'w) (idC 'h)))))
+                     (list (funDefC (idC 'area) (list (idC 'w) (idC 'h)) (binopC '* (idC 'w) (idC 'h))))) 
 
 (check-equal? (parse-prog '{{def addOne (y) =>
                                      (+ y 1)} })
