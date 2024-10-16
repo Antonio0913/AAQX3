@@ -2,7 +2,7 @@
 (require typed/rackunit)
 
 ;;defining the AAQX3C language
-(define-type AAQX3C (U numC binopC squareC funDefC idC appC))
+(define-type AAQX3C (U numC binopC squareC funDefC idC appC ifleq0?))
 
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
@@ -10,7 +10,7 @@
 (struct funDefC [(name : idC) (args : (Listof idC)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
 (struct appC [(name : idC) (args : (Listof AAQX3C))] #:transparent)
-(struct ifleq0? [(test : numC) (then : AAQX3C) (else : AAQX3C)] #:transparent)
+(struct ifleq0? [(test : AAQX3C) (then : AAQX3C) (else : AAQX3C)] #:transparent)
 
 (define n1 (numC 1))
 (define n2 (numC 2))
@@ -86,7 +86,7 @@
                    [(equal? n (funDefC-name first-fd)) first-fd]
                    [else (get-fundef n rest-fds)])]))
 
-
+ 
 ;;interpret functions
 (define (interp-fns [funs : (Listof funDefC)]) : Real
   (printf "Function definitions (funs): ~a\n" funs)
@@ -98,7 +98,7 @@
     [(cons fun rest)
      (if (equal? (funDefC-name fun) (idC 'main)) fun (find-main rest))]))
 
-
+ 
 
 (define (top-interp [funcs : Sexp])
   (interp-fns (parse-prog funcs)))
@@ -108,6 +108,10 @@
     [(numC n) n]
     [(binopC op l r) ((hash-ref op-table op) (interp l fds) (interp r fds))]
     [(squareC n) (expt (interp n fds) 2)]
+    [(ifleq0? test then else)
+     (if (<= (interp test fds) 0)
+         (interp then fds)
+         (interp else fds))]
     [(appC f a) (local ([define fd (get-fundef f fds)])
               (interp (subst (zip a (funDefC-args fd))
                              (funDefC-body fd) fds) fds))] ;;passes in the whole function body?
@@ -120,7 +124,13 @@
 (check-equal? (interp p1 '()) 3)
 (check-equal? (interp m2 '()) 12)
 (check-equal? (interp s1 '()) 4)
-   
+
+(check-equal? (interp (ifleq0? (numC 2) (numC 1) (numC 3)) '()) 3)
+(check-equal? (interp (ifleq0? (numC -2) (numC 1) (numC 3)) '()) 1)
+
+(check-equal? (interp (ifleq0? (binopC '- (numC 2) (numC 4)) (numC 1) (numC 3)) '()) 1)
+(check-equal? (interp (ifleq0? (binopC '- (numC 2) (numC 4)) (binopC '* (numC 2) (numC 4)) (numC 3)) '()) 8)
+ 
 ;;parser
 
 
@@ -148,7 +158,7 @@
                           (error "AAQZ3 found a syntax error repeated function name\n") (cons func (check-duplicate new rest)))]))
 
 
-
+ 
 
 (define (parse-fundef [prog : Sexp]) : funDefC
   (match prog
@@ -167,6 +177,7 @@
     [(? real? n) (numC n)]
     [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
+    [(list 'ifleq0? test then else) (ifleq0? (parse test) (parse then) (parse else))]
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
@@ -195,10 +206,10 @@
                      (numC 5)))
 ;(check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
 
- 
-
 (check-exn #rx"Incorrect binop syntax:" (lambda () (parse '{+ 3})))
 
+(check-equal? (parse '{ifleq0? 1 2 3})
+              (ifleq0? (numC 1) (numC 2) (numC 3)))
 
 (check-equal? (interp-fns
        (parse-prog '{{def f1 {(x y) => {+ x y}}}
