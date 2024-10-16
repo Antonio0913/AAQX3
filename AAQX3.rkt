@@ -139,8 +139,8 @@
     ['() (cons new '())]
     [(cons func rest)
      (if (equal? (funDefC-name new) (funDefC-name func))
-                          (error "AAQZ3 found a syntax error repeated function name\n") (check-duplicate func rest))]))
-
+                          (error "AAQZ3 found a syntax error repeated function name\n") (check-duplicate new rest))]))
+   
 (define (parse-fundef [prog : Sexp]) : funDefC
   (match prog
     [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
@@ -192,8 +192,8 @@
 
 
 (check-equal? (interp-fns
-       (parse-prog '{{def f {(x y) => {+ x y}}}
-                     {def main {() => {f 1 2}}}}))
+       (parse-prog '{{def f1 {(x y) => {+ x y}}}
+                     {def main {() => {f1 1 2}}}}))
       3)
 
  (check-equal? (interp-fns
