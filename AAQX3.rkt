@@ -150,20 +150,13 @@
 ;;takes in a function and a list of function and check if its a repeated name
 
 (define (check-duplicate-func [new : funDefC] [existing : (Listof funDefC)]) : (Listof funDefC)
-  (printf "Function definitions (funs): ~a\n" existing)
   (match existing
     ['() (cons new existing)]
     [(cons func rest)
      (if (equal? (funDefC-name new) (funDefC-name func))
          (error "AAQZ3 found a syntax error repeated function name\n") (cons func (check-duplicate-func new rest)))]))
 
-(define (check-duplicate-arg [new : idC] [existing : (Listof idC)]) : (Listof idC)
-  (printf "Function definitions (funs): ~a\n" existing)
-  (match existing
-    ['() (cons new existing)]
-    [(cons arg rest)
-     (if (equal? new arg)
-         (error "AAQZ3 found a syntax error repeated function name\n") (cons arg (check-duplicate-arg new rest)))]))
+
 
  
 
@@ -171,8 +164,21 @@
   (match prog
     [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
     [(list 'def (? symbol? name) (list (list args ...) '=> body)) 
-        (if (andmap symbol? args)  (funDefC (idC name) (map idC args) (parse body))
+        (if (andmap symbol? args)  (funDefC (idC name) (check-duplicate-arg (map idC args)) (parse body))
              (error 'parse "AAQX3 Expected a list of symbols for arguments"))]))
+
+
+(define (check-duplicate-arg [args : (Listof idC)]) : (Listof idC)
+  (match args
+    ['() '()]
+    [(cons first rest) (cons (check-duplicate-arg-helper first rest) (check-duplicate-arg rest))]))
+
+(define (check-duplicate-arg-helper [new : idC] [existing : (Listof idC)]) : idC
+  (match existing
+    ['() new]
+    [(cons arg rest)
+     (if (equal? new arg)
+         (error "AAQZ3 found a syntax error repeated argument name\n") (check-duplicate-arg-helper new rest))]))
 
 ;;
 (define (op-in-table? [op : Symbol]) : Boolean
@@ -181,7 +187,6 @@
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
-    [(list '^2 n) (squareC (parse n))]
     [(? symbol? s) (idC s)]
     [(list 'ifleq0? test then else) (ifleq0? (parse test) (parse then) (parse else))]
 
@@ -216,7 +221,7 @@
 (check-exn #rx"Incorrect binop syntax:" (lambda () (parse '{+ 3})))
 
 (check-equal? (parse '{ifleq0? 1 2 3})
-              (ifleq0? (numC 1) (numC 2) (numC 3)))
+              (ifleq0? (numC 1) (numC 2) (numC 3))) 
 
 (check-equal? (interp-fns
        (parse-prog '{{def f1 {(x y) => {+ x y}}}
@@ -228,9 +233,19 @@
                       {def main {() => {+ {f} {f}}}}}))
        10)
 
+(check-exn #rx"AAQZ3 found a syntax error repeated argument name" (lambda () (interp-fns
+        (parse-prog '{{def f1 {(x x) => {+ x y}}} 
+                     {def main {() => {f1 1 2}}}}))))
 
-(check-exn #rx"AAQZ3 found a syntax error" (lambda () (interp-fns
+(check-exn #rx"AAQZ3 found a syntax error repeated function name" (lambda () (interp-fns
         (parse-prog '{{def f {() => 5}}
-                      {def f {() => 5}}
+                      {def f {() => 5}} 
                       {def main {() => {+ {f} {f}}}}}))))
 
+(check-exn #rx"AAQX3 found an unbound variable" (lambda () (interp-fns
+        (parse-prog '{{def f1 {(x) => {+ x y}}} 
+                     {def main {() => {f1 1}}}}))))
+
+(check-exn #rx"Number of variables and arguments do not match AAQX3" (lambda () (interp-fns
+        (parse-prog '{{def f1 {(x) => {+ x y}}} 
+                     {def main {() => {f1 1 2}}}}))))
