@@ -89,6 +89,7 @@
 
 ;;interpret functions
 (define (interp-fns [funs : (Listof funDefC)]) : Real
+  (printf "Function definitions (funs): ~a\n" funs)
   (interp (funDefC-body (find-main funs)) funs))
 
 (define (find-main [funs : (Listof funDefC)]) : funDefC
@@ -96,6 +97,8 @@
     ['() (error 'find-main "AAQZ3C cant find main :(")]
     [(cons fun rest)
      (if (equal? (funDefC-name fun) (idC 'main)) fun (find-main rest))]))
+
+
 
 (define (top-interp [funcs : Sexp])
   (interp-fns (parse-prog funcs)))
@@ -118,7 +121,8 @@
 (check-equal? (interp m2 '()) 12)
 (check-equal? (interp s1 '()) 4)
    
-;;parser 
+;;parser
+
 
 (define (parse-prog [progs : Sexp]) : (Listof funDefC)
   (match progs
@@ -134,13 +138,18 @@
     ;;[_ (error "AAQX3 Invalid program format")]
 
 ;;takes in a function and a list of function and check if its a repeated name
+
 (define (check-duplicate [new : funDefC] [existing : (Listof funDefC)]) : (Listof funDefC)
+  (printf "Function definitions (funs): ~a\n" existing)
   (match existing
-    ['() (cons new '())]
+    ['() (cons new existing)]
     [(cons func rest)
      (if (equal? (funDefC-name new) (funDefC-name func))
-                          (error "AAQZ3 found a syntax error repeated function name\n") (check-duplicate new rest))]))
-   
+                          (error "AAQZ3 found a syntax error repeated function name\n") (cons func (check-duplicate new rest)))]))
+
+
+
+
 (define (parse-fundef [prog : Sexp]) : funDefC
   (match prog
     [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
@@ -196,14 +205,14 @@
                      {def main {() => {f1 1 2}}}}))
       3)
 
- (check-equal? (interp-fns
+(check-equal? (interp-fns
         (parse-prog '{{def f {() => 5}}
                       {def main {() => {+ {f} {f}}}}}))
        10)
 
- (check-equal? (interp-fns
+
+(check-exn #rx"AAQZ3 found a syntax error" (lambda () (interp-fns
         (parse-prog '{{def f {() => 5}}
                       {def f {() => 5}}
-                      {def main {() => {+ {f} {f}}}}}))
-       10)
+                      {def main {() => {+ {f} {f}}}}}))))
 
