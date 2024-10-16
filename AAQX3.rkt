@@ -43,13 +43,12 @@
   (match in
   [(numC n) in]
   [(idC s) (subst-id in subs fds)] ;;if it finds an idC it calls subst-id then just stops?
-  ;;[(appC n a) (appC n (subst-single what for a))]
-  [(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
+  ;;[(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
   [(binopC op l r) (binopC op (subst subs l fds)
                       (subst subs r fds))]))
   
 
-(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
+#;(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
   (match args 
     ['() '()]
     [(cons (? idC? id) r) (cons (subst-id id subs fds) (change-args subs r fds))]
@@ -65,7 +64,7 @@
     [(empty? l1) '()]
     [else (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))]))
 
-(define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
+#;(define (AAQX3C=? [arg1 : AAQX3C] [arg2 : AAQX3C]) : Boolean
   (equal? arg1 arg2))
  
 (define (subst-id [s : idC] [subs : (Listof (Listof AAQX3C))] [fds : (Listof funDefC)]) : AAQX3C
@@ -87,7 +86,20 @@
                    [(equal? n (funDefC-name first-fd)) first-fd]
                    [else (get-fundef n rest-fds)])]))
 
-;;interpret function
+
+;;interpret functions
+(define (interp-fns [funs : (Listof funDefC)]) : Real
+  (interp (funDefC-body (find-main funs)) funs))
+
+(define (find-main [funs : (Listof funDefC)]) : funDefC
+  (match funs
+    ['() (error 'find-main "AAQZ3C cant find main :(")]
+    [(cons fun rest)
+     (if (equal? (funDefC-name fun) (idC 'main)) fun (find-main rest))]))
+
+(define (top-interp [funcs : Sexp])
+  (interp-fns (parse-prog funcs)))
+
 (define (interp [a : AAQX3C] [fds : (Listof funDefC)]) : Real
   (match a
     [(numC n) n]
@@ -112,13 +124,23 @@
   (match progs
     ['() '()]
     [(cons prog rest)
-     (match prog
+     (cons (parse-fundef prog) (parse-prog rest))]))
+     #;(match prog
        [(list 'def (? symbol? name) '() '=> body) (cons (funDefC (idC name) '() (parse body)) (parse-prog rest))]
        [(list 'def (? symbol? name) (list args ...) '=> body)
         (if (andmap symbol? args) (cons (funDefC (idC name) (map idC args) (parse body)) (parse-prog rest))
              (error 'parse "AAQX3 Expected a list of symbols for arguments"))]
-       [_ (error "AAQX3 Expected 'def' with correct syntax but found something else")])]  
-    [_ (error "AAQX3 Invalid program format")])) 
+       [_ (error "AAQX3 Expected 'def' with correct syntax but found something else")])  
+    ;;[_ (error "AAQX3 Invalid program format")]
+
+
+(define (parse-fundef [prog : Sexp]) : funDefC
+  (match prog
+    [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
+    [(list 'def (? symbol? name) (list (list args ...) '=> body)) 
+        (if (andmap symbol? args)  (funDefC (idC name) (map idC args) (parse body))
+             (error 'parse "AAQX3 Expected a list of symbols for arguments"))])
+  )
 
 ;;
 (define (op-in-table? [op : Symbol]) : Boolean
@@ -162,37 +184,14 @@
 (check-exn #rx"Incorrect binop syntax:" (lambda () (parse '{+ 3})))
 
 
-(check-equal? (parse-prog '{{def addOne (y) => 
-                                     (+ y 1)}}) 
-              (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))))
-
-(check-equal? (parse-prog '{{def oneAddOne () =>
-                                     (+ 1 1)}})
-              (list (funDefC (idC 'oneAddOne) '() (binopC '+ (numC '1) (numC 1)))))
-
-(check-equal? (parse-prog '{{def area (w h) =>
-                                       (* w h)} })
-                     (list (funDefC (idC 'area) (list (idC 'w) (idC 'h)) (binopC '* (idC 'w) (idC 'h))))) 
-
-(check-equal? (parse-prog '{{def addOne (y) =>
-                                     (+ y 1)} })
-              (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))))
-
-(check-equal? (interp (parse '(addOne 2)) (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1))))) 3)
-
-
-(check-equal? (interp (parse
-                      '(addFunction 2 (addOne 2) 1))
-                      (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
-                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'num2) (idC 'num1)) {binopC '+ {idC 'num1} {binopC '+ {idC 'num} {idC 'num2}}}))) 6)
-
-(check-equal? (interp (parse
-                      '(addOne (addFunction 2 1)))
-                      (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
-                            (funDefC (idC 'addFunction) (list (idC 'num) (idC 'num1)) {binopC '+ {idC 'num1} {idC 'num}}))) 4)
-
-  
-
+(check-equal? (interp-fns
+       (parse-prog '{{def f {(x y) => {+ x y}}}
+                     {def main {() => {f 1 2}}}}))
+      3)
+ (check-equal? (interp-fns
+        (parse-prog '{{def f {() => 5}}
+                      {def main {() => {+ {f} {f}}}}}))
+       10)
 
 
 
