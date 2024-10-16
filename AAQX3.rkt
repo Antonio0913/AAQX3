@@ -2,11 +2,10 @@
 (require typed/rackunit)
 
 ;;defining the AAQX3C language
-(define-type AAQX3C (U numC binopC squareC funDefC idC appC ifleq0?))
+(define-type AAQX3C (U numC binopC funDefC idC appC ifleq0?))
 
 (struct numC[(n : Real)] #:transparent)
 (struct binopC[(op : Symbol) (l : AAQX3C) (r : AAQX3C)] #:transparent)
-(struct squareC[(n : AAQX3C)] #:transparent)
 (struct funDefC [(name : idC) (args : (Listof idC)) (body : AAQX3C)] #:transparent)
 (struct idC [(name : Symbol)] #:transparent)
 (struct appC [(name : idC) (args : (Listof AAQX3C))] #:transparent)
@@ -36,6 +35,17 @@
     '* *
     '/ /
     '- -))
+
+;;defining hash table for invalid identifier
+(define invalid-table
+  (hash
+   '+ 
+   '* 
+   '/
+   '-
+   'def
+   'ifleq0?
+   '=>))
 
 
 ;;takes in _, _ and _ and 
@@ -162,8 +172,8 @@
 
 (define (parse-fundef [prog : Sexp]) : funDefC
   (match prog
-    [(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
-    [(list 'def (? symbol? name) (list (list args ...) '=> body)) 
+    #;[(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
+    [(list 'def (? symbol? name) (list (list args ...) '=> body)) ;;make sure name is valid id
         (if (andmap symbol? args)  (funDefC (idC name) (check-duplicate-arg (map idC args)) (parse body))
              (error 'parse "AAQX3 Expected a list of symbols for arguments"))]))
 
@@ -187,18 +197,20 @@
 (define (parse [prog : Sexp]) : AAQX3C
   (match prog
     [(? real? n) (numC n)]
-    [(? symbol? s) (idC s)]
     [(list 'ifleq0? test then else) (ifleq0? (parse test) (parse then) (parse else))]
-
     [(list (? symbol? op) l r)
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          ;(error 'parse "Unsupported operator in AAQX3: ~a" op)
-         (appC (idC op) (list (parse l) (parse r))))]
+         (appC (idC op) (list (parse l) (parse r))))] ;;make sure op is valid id
     [(list (? symbol? s) args ...)
-     (if (hash-has-key? op-table s)
-         (error 'parse "Incorrect binop syntax: ~a in AAQX3" prog)
-         (appC (idC s) (map parse args)))] ;;needs to be able to parse function calls too here right?
+     (if (hash-has-key? invalid-table s)
+         (error 'parse "Invalid identifier: ~a in AAQX3" prog)
+         (appC (idC s) (map parse args)))]
+    [(? symbol? s)
+     (if hash-has-key? invalid-table s
+         (error 'parse "Invalid identifier: ~a in AAQX3" prog)
+         (idC s))]
     [other (error 'parse "syntax error in AAQX3, got ~e" other)])) ;; when do we reach here now?
 
 
@@ -206,10 +218,6 @@
 
 (check-equal? (parse '5)
              (numC 5))
-
-(check-equal? (parse '{^2 {+ 4 5}})
-              (squareC
-               (binopC '+ (numC 4) (numC 5))))
               
 
 (check-equal? (parse '{* {+ 2 3} 5})
