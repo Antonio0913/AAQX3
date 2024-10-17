@@ -51,12 +51,12 @@
   (match in
   [(numC n) in]
   [(idC s) (subst-id in subs fds)] ;;if it finds an idC it calls subst-id then just stops?
-  ;;[(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
+  [(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
   [(binopC op l r) (binopC op (subst subs l fds)
                       (subst subs r fds))]))
   
 
-#;(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
+(define (change-args [subs : (Listof (Listof AAQX3C))] [args : (Listof AAQX3C)] [fds : (Listof funDefC)]) : (Listof AAQX3C)
   (match args 
     ['() '()]
     [(cons (? idC? id) r) (cons (subst-id id subs fds) (change-args subs r fds))]
@@ -97,7 +97,6 @@
  
 ;;interpret functions
 (define (interp-fns [funs : (Listof funDefC)]) : Real
-  (printf "Function definitions (funs): ~a\n" funs)
   (interp (funDefC-body (find-main funs)) funs))
 
 (define (find-main [funs : (Listof funDefC)]) : funDefC
@@ -172,7 +171,7 @@
     [(list 'def (? symbol? name) (list (list args ...) '=> body)) ;;make sure name is valid id
      (cond
        [(hash-has-key? invalid-table name) (error 'parse "Invalid identifier in AAQZ in parse-fundef: ~a" prog)]
-       [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments")]
+       [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments got ~a" args)]
        [else (funDefC (idC name) (check-duplicate-arg (map idC args)) (parse body))])]))
 
  
@@ -237,9 +236,22 @@
       3)
 
 (check-equal? (interp-fns
+       (parse-prog '{{def f2 {(x y) => {* x y}}}
+                     {def f1 {(x y z a b) => {- {f2 {+ x y} z} {+ a b}}}}
+                     {def f3 {() => 5}}
+                     {def main {() => {+ {f1 1 2 3 4 {f2 f3 f3}} {f2 2 f3}}}}})) 
+      3)
+
+(check-equal? (interp-fns
         (parse-prog '{{def f {() => 5}}
                       {def main {() => {+ {f} {f}}}}}))
        10)
+
+(check-equal? (interp (parse
+                      '(sum3 (sum3 2 1 3) (addOne 1) 3))
+                      (list (funDefC (idC 'addOne) (list (idC 'y)) (binopC '+ (idC 'y) (numC 1)))
+                            (funDefC (idC 'sum3) (list (idC 'num) (idC 'num1) (idC 'num2)) {binopC '+ {idC 'num2} {binopC '+ {idC 'num1} {idC 'num}}}))) 11) 
+
 
 (check-exn #rx"Number of variables and arguments do not match"(lambda () (zip (list (numC 2) (numC 5)) (list (numC 8)))))
 (check-exn #rx"AAQX3 found an unbound variable:" (lambda () (subst-id (idC 'test) '() '())))
