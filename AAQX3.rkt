@@ -84,7 +84,7 @@
          (subst-id s rest fds))]
     [(cons _ rest) (subst-id s rest fds)]))
 
-
+ 
 
 ;;function
 (define (get-fundef [n : idC] [fds : (Listof funDefC)]) : funDefC
@@ -170,9 +170,12 @@
   (match prog
     #;[(list 'def (? symbol? name) (list '() '=> body)) (funDefC (idC name) '() (parse body))]
     [(list 'def (? symbol? name) (list (list args ...) '=> body)) ;;make sure name is valid id
-        (if (andmap symbol? args)  (funDefC (idC name) (check-duplicate-arg (map idC args)) (parse body))
-             (error 'parse "AAQX3 Expected a list of symbols for arguments"))]))
+     (cond
+       [(hash-has-key? invalid-table name) (error 'parse "Invalid identifier in AAQZ in parse-fundef: ~a" prog)]
+       [(not (andmap symbol? args)) (error 'parse "AAQZ Expected a list of symbols for arguments")]
+       [else (funDefC (idC name) (check-duplicate-arg (map idC args)) (parse body))])]))
 
+ 
 
 (define (check-duplicate-arg [args : (Listof idC)]) : (Listof idC)
   (match args
@@ -185,12 +188,11 @@
     [(cons arg rest)
      (if (equal? new arg)
          (error "AAQZ3 found a syntax error repeated argument name\n") (check-duplicate-arg-helper new rest))]))
-
 ;;
 #;(define (op-in-table? [op : Symbol]) : Boolean
   (hash-has-key? op-table op))
 
-(define (parse [prog : Sexp]) : AAQX3C
+(define (parse [prog : Sexp]) : AAQX3C 
   (match prog
     [(? real? n) (numC n)]
     [(list 'ifleq0? test then else) (ifleq0? (parse test) (parse then) (parse else))]
@@ -198,7 +200,9 @@
      (if (hash-has-key? op-table op)
          (binopC op (parse l) (parse r))
          ;(error 'parse "Unsupported operator in AAQX3: ~a" op)
-         (appC (idC op) (list (parse l) (parse r))))] ;;make sure op is valid id
+         (if (hash-has-key? invalid-table op)
+             (error 'parse "Invalid identifier: ~a in AAQX3" prog)
+             (appC (idC op) (list (parse l) (parse r)))))] ;;make sure op is valid id
     [(list (? symbol? s) args ...)
      (if (hash-has-key? invalid-table s)
          (error 'parse "Invalid identifier: ~a in AAQX3" prog)
@@ -210,7 +214,7 @@
     [other (error 'parse "syntax error in AAQX3, got ~e" other)])) ;; when do we reach here now?
 
 
-;;parse test cases
+;;parse test cases 
 
 (check-equal? (parse '5)
              (numC 5))
@@ -237,8 +241,18 @@
                       {def main {() => {+ {f} {f}}}}}))
        10)
 
-(check-exn #rx"AAQZ3 found a syntax error repeated argument name" (lambda () (interp-fns
+(check-exn #rx"Number of variables and arguments do not match"(lambda () (zip (list (numC 2) (numC 5)) (list (numC 8)))))
+(check-exn #rx"AAQX3 found an unbound variable:" (lambda () (subst-id (idC 'test) '() '())))
+(check-exn #rx"reference to undefined function" (lambda () (get-fundef (idC 'test2) '())))
+(check-exn #rx"interp: AAQX3 shouldn't get here" (lambda () (interp (idC 'test3) '())))
+(check-exn #rx"syntax error in AAQX3, got" (lambda () (parse "Testing")))
+ 
+(check-exn #rx"Invalid identifier in AAQZ in parse-fundef:" (lambda () (interp-fns
         (parse-prog '{{def * {(x y) => {+ x y}}} 
+                     {def main {() => {* 1 2}}}}))))
+
+(check-exn #rx"AAQZ Expected a list of symbols for arguments" (lambda () (interp-fns
+        (parse-prog '{{def test {((numC 5) y) => {+ x y}}} 
                      {def main {() => {* 1 2}}}}))))
 
 (check-exn #rx"AAQZ3 found a syntax error repeated argument name" (lambda () (interp-fns
@@ -256,4 +270,5 @@
 
 (check-exn #rx"Number of variables and arguments do not match AAQX3" (lambda () (interp-fns
         (parse-prog '{{def f1 {(x) => {+ x y}}} 
-                     {def main {() => {f1 1 2}}}})))) 
+                     {def main {() => {f1 1 2}}}}))))
+ 
