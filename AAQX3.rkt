@@ -22,9 +22,7 @@
 (define m1 (binopC '* n1 n2))
 (define m2 (binopC '* n3 n4))
 
-(define s1 (squareC n2))
-(define s2 (squareC n3))
- 
+
 
 
 
@@ -39,13 +37,13 @@
 ;;defining hash table for invalid identifier
 (define invalid-table
   (hash
-   '+ 
-   '* 
-   '/
-   '-
-   'def
-   'ifleq0?
-   '=>))
+   '+ 0
+   '* 0
+   '/ 0
+   '- 0
+   'def 0 
+   'ifleq0? 0
+   '=> 0))
 
 
 ;;takes in _, _ and _ and 
@@ -117,7 +115,6 @@
   (match a
     [(numC n) n]
     [(binopC op l r) ((hash-ref op-table op) (interp l fds) (interp r fds))]
-    [(squareC n) (expt (interp n fds) 2)]
     [(ifleq0? test then else)
      (if (<= (interp test fds) 0)
          (interp then fds)
@@ -133,7 +130,6 @@
 (check-equal? (interp n1 '()) 1)
 (check-equal? (interp p1 '()) 3)
 (check-equal? (interp m2 '()) 12)
-(check-equal? (interp s1 '()) 4)
 
 (check-equal? (interp (ifleq0? (numC 2) (numC 1) (numC 3)) '()) 3)
 (check-equal? (interp (ifleq0? (numC -2) (numC 1) (numC 3)) '()) 1)
@@ -191,7 +187,7 @@
          (error "AAQZ3 found a syntax error repeated argument name\n") (check-duplicate-arg-helper new rest))]))
 
 ;;
-(define (op-in-table? [op : Symbol]) : Boolean
+#;(define (op-in-table? [op : Symbol]) : Boolean
   (hash-has-key? op-table op))
 
 (define (parse [prog : Sexp]) : AAQX3C
@@ -208,7 +204,7 @@
          (error 'parse "Invalid identifier: ~a in AAQX3" prog)
          (appC (idC s) (map parse args)))]
     [(? symbol? s)
-     (if hash-has-key? invalid-table s
+     (if (hash-has-key? invalid-table s)
          (error 'parse "Invalid identifier: ~a in AAQX3" prog)
          (idC s))]
     [other (error 'parse "syntax error in AAQX3, got ~e" other)])) ;; when do we reach here now?
@@ -226,7 +222,7 @@
                      (numC 5)))
 ;(check-exn #rx"Unsupported operator" (lambda () (parse '{> 3 4})))
 
-(check-exn #rx"Incorrect binop syntax:" (lambda () (parse '{+ 3})))
+(check-exn #rx"parse: Invalid identifier" (lambda () (parse '{+ 3})))
 
 (check-equal? (parse '{ifleq0? 1 2 3})
               (ifleq0? (numC 1) (numC 2) (numC 3))) 
@@ -240,6 +236,10 @@
         (parse-prog '{{def f {() => 5}}
                       {def main {() => {+ {f} {f}}}}}))
        10)
+
+(check-exn #rx"AAQZ3 found a syntax error repeated argument name" (lambda () (interp-fns
+        (parse-prog '{{def * {(x y) => {+ x y}}} 
+                     {def main {() => {* 1 2}}}}))))
 
 (check-exn #rx"AAQZ3 found a syntax error repeated argument name" (lambda () (interp-fns
         (parse-prog '{{def f1 {(x x) => {+ x y}}} 
@@ -256,4 +256,4 @@
 
 (check-exn #rx"Number of variables and arguments do not match AAQX3" (lambda () (interp-fns
         (parse-prog '{{def f1 {(x) => {+ x y}}} 
-                     {def main {() => {f1 1 2}}}}))))
+                     {def main {() => {f1 1 2}}}})))) 
