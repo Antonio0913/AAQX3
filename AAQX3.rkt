@@ -122,7 +122,13 @@
 (define (interp [a : ExprC] [fds : (Listof FundefC)]) : Real 
   (match a
     [(numC n) n]
-    [(binopC op l r) ((hash-ref op-table op) (interp l fds) (interp r fds))]
+    [(binopC op l r)
+     (define right-val (interp r fds))
+       (cond
+         [(and (eq? op '/) (= right-val 0)) 
+          (error 'interp "Division by zero at runtime!")] ;; Check if dividing by zero
+         [else 
+          ((hash-ref op-table op) (interp l fds) right-val)])]
     [(ifleq0? test then else)
      (if (<= (interp test fds) 0)
          (interp then fds)
@@ -344,4 +350,4 @@
 
 (check-equal? (top-interp (quote ((def main (() => (+ (f 13) (f 0)))) (def f ((qq) => (ifleq0? qq qq (+ qq 1))))))) 14)
 
-(top-interp '((def ignoreit ((x) => (/ 1 1))) (def main (() => (ignoreit (/ 1 (+ 0 0)))))))
+(top-interp '((def ignoreit ((x) => (/ 1 (+ 0 0)))) (def main (() => (ignoreit (/ 1 (+ 0 0)))))))
