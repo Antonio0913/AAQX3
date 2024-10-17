@@ -70,9 +70,9 @@
                       [fds : (Listof FundefC)]) : (Listof ExprC)
    (match args 
     ['() '()]
-    [(cons (? idC? id) r) 
+    [(cons (? idC? id) r)
      (cons (subst-id id subs) (change-args subs r fds))]
-    [(cons other r) 
+    [(cons other r)
      (cons (subst subs other fds) (change-args subs r fds))]))
 
 
@@ -81,6 +81,13 @@
     [(list '() '()) '()]
     [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
     [other (error 'zip "Number of variables and arguments do not match AAQZ3: ~a" other)]))
+
+(define (interp-args [args : (Listof ExprC)] [fds : (Listof FundefC)]) : (Listof ExprC)
+  (match args
+    ['() '()]
+    [(cons (? numC? a) r) (cons a (interp-args r fds))]
+    [(cons other r) (cons (numC (interp other fds)) (interp-args r fds))]))
+
 
 #;(define (ExprC=? [arg1 : ExprC] [arg2 : ExprC]) : Boolean
   (equal? arg1 arg2))
@@ -114,8 +121,6 @@
     [(cons fun rest)
      (if (equal? (FundefC-name fun) (idC 'main)) fun (find-main rest))]))
 
- 
-
 (define (top-interp [funcs : Sexp])
   (interp-fns (parse-prog funcs)))
 
@@ -126,7 +131,7 @@
      (define right-val (interp r fds))
        (cond
          [(and (eq? op '/) (= right-val 0)) 
-          (error 'interp "Division by zero at runtime!")] ;; Check if dividing by zero
+          (error 'interp "AAQZ3 found division by zero!")] 
          [else 
           ((hash-ref op-table op) (interp l fds) right-val)])]
     [(ifleq0? test then else)
@@ -137,10 +142,9 @@
               (interp (subst (zip a (FundefC-args fd))
                              (FundefC-body fd) fds) fds))]
     [(appC f a) (local ([define fd (get-fundef f fds)])
-              (interp (subst (zip a (FundefC-args fd))
+              (interp (subst (zip (interp-args a fds) (FundefC-args fd))
                              (FundefC-body fd) fds) fds))]
     [(idC _) (error 'interp "AAQZ3 shouldn't get here got ~a" a )]))
- 
 
 
 ;;interp test cases
@@ -232,7 +236,6 @@
          (error 'parse "Invalid identifier: ~a in AAQZ3" prog)
          (idC s))]
     [other (error 'parse "syntax error in AAQZ3, got ~e" other)])) ;; when do we reach here now?
-
 
 ;;parse test cases 
 
@@ -346,8 +349,11 @@
          {f6 10 20 {f3} {f5 2 {f7 {f6 10 20 {f5 2 {f7 {f3} {f7 2 3}}} {f2 {f3} {f4 2 3 4}}} 4}}}}}}}) -9554550) 
 
 
-(check-exn #rx"Invalid identifier:" (lambda () (parse 'ifleq0?)))`
+(check-exn #rx"Invalid identifier:" (lambda () (parse 'ifleq0?)))
 
 (check-equal? (top-interp (quote ((def main (() => (+ (f 13) (f 0)))) (def f ((qq) => (ifleq0? qq qq (+ qq 1))))))) 14)
 
-(top-interp '((def ignoreit ((x) => (/ 1 (+ 0 0)))) (def main (() => (ignoreit (/ 1 (+ 0 0)))))))
+(check-exn #rx"AAQZ3 found division by zero!" (lambda () (top-interp '((def ignoreit ((x) => 1))
+                                                                       (def main (() => (ignoreit (/ 1 (+ 0 0)))))))))
+
+
