@@ -210,7 +210,7 @@
          ;(error 'parse "Unsupported operator in AAQX3: ~a" op)
          (if (hash-has-key? invalid-table op)
              (error 'parse "Invalid identifier: ~a in AAQX3" prog)
-             (appC (idC op) (list (parse l) (parse r)))))] ;;make sure op is valid id
+             (appC (idC op) (list (parse l) (parse r)))))] ;;make sure op is valid id 
     [(list (? symbol? s) args ...)
      (if (hash-has-key? invalid-table s)
          (error 'parse "Invalid identifier: ~a in AAQX3" prog)
@@ -270,10 +270,15 @@
 (check-exn #rx"reference to undefined function" (lambda () (get-fundef (idC 'test2) '())))
 (check-exn #rx"interp: AAQX3 shouldn't get here" (lambda () (interp (idC 'test3) '())))
 (check-exn #rx"syntax error in AAQX3, got" (lambda () (parse "Testing")))
+(check-exn #rx"Invalid identifier:" (lambda () (parse '(def 2 3))))
  
 (check-exn #rx"Invalid identifier in AAQZ in parse-fundef:" (lambda () (interp-fns
         (parse-prog '{{def * {(x y) => {+ x y}}} 
                      {def main {() => {* 1 2}}}}))))
+
+(check-exn #rx"find-main: AAQZ3C cant find main" (lambda () (interp-fns
+        (parse-prog '{{def testing {(x y) => {+ x y}}} 
+                     {def fake-main {() => {* 1 2}}}})))) 
 
 (check-exn #rx"AAQZ Expected a list of symbols for arguments" (lambda () (interp-fns
         (parse-prog '{{def test {((numC 5) y) => {+ x y}}} 
@@ -295,4 +300,11 @@
 (check-exn #rx"Number of variables and arguments do not match AAQX3" (lambda () (interp-fns
         (parse-prog '{{def f1 {(x) => {+ x y}}} 
                      {def main {() => {f1 1 2}}}}))))
+
+(check-equal? (top-interp '{{def f2 {(x y) => {* x y}}}
+                     {def f1 {(x y z a b) => {- {f2 {+ x y} z} {+ a b}}}}
+                     {def f3 {() => 5}}
+                     {def main {() => {+ {f1 1 2 3 4 {f2 (f3) (f3)}} {f2 2 (f3)}}}}})
+      -10)
+
  
