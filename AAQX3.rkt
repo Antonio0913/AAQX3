@@ -48,14 +48,12 @@
 
 ;;takes in _, _ and _ and 
 (define (subst [subs : (Listof (Listof ExprC))] [in : ExprC] [fds : (Listof FundefC)]) : ExprC
-  (printf "in ~a\n" in)
   (match in
   [(numC n) in]
-  [(idC s) (subst-id in subs fds)] ;;if it finds an idC it calls subst-id then just stops?
-  
+  [(idC s) (subst-id in subs)] ;;if it finds an idC it calls subst-id then just stops?
   [(binopC op l r) (binopC op (subst subs l fds)
                       (subst subs r fds))]
-  [(appC n a) (numC (interp (appC n (change-args subs a fds)) fds))]
+  [(appC n a) (appC n (change-args subs a fds))]
   [(ifleq0? con f1 f2) (ifleq0? (subst subs con fds) (subst subs f1 fds) (subst subs f2 fds))]))
   
 
@@ -73,7 +71,7 @@
    (match args 
     ['() '()]
     [(cons (? idC? id) r) 
-     (cons (subst-id id subs fds) (change-args subs r fds))]
+     (cons (subst-id id subs) (change-args subs r fds))]
     [(cons other r) 
      (cons (subst subs other fds) (change-args subs r fds))]))
 
@@ -82,18 +80,17 @@
   (match (list l1 l2)
     [(list '() '()) '()]
     [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
-    [other (error 'zip "Number of variables and arguments do not match AAQZ3")]))
+    [other (error 'zip "Number of variables and arguments do not match AAQZ3: ~a" other)]))
 
 #;(define (ExprC=? [arg1 : ExprC] [arg2 : ExprC]) : Boolean
   (equal? arg1 arg2))
  
-(define (subst-id [s : idC] [subs : (Listof (Listof ExprC))] [fds : (Listof FundefC)]) : ExprC
+(define (subst-id [s : idC] [subs : (Listof (Listof ExprC))]) : ExprC
   (match subs
     ['() (error 'subst-id (format "AAQZ3 found an unbound variable: ~a" s))]
     [(cons (list what (? idC? for)) rest)
-     (if (equal? s for)
-         (numC (interp what fds))
-         (subst-id s rest fds))]))
+     (if (equal? s for) what
+         (subst-id s rest))]))
     ;;[(cons _ rest) (subst-id s rest fds)]))
 
  
@@ -130,9 +127,12 @@
      (if (<= (interp test fds) 0)
          (interp then fds)
          (interp else fds))]
+    #;[(appC f a) (local ([define fd (get-fundef f fds)])
+              (interp (subst (zip a (FundefC-args fd))
+                             (FundefC-body fd) fds) fds))]
     [(appC f a) (local ([define fd (get-fundef f fds)])
               (interp (subst (zip a (FundefC-args fd))
-                             (FundefC-body fd) fds) fds))] 
+                             (FundefC-body fd) fds) fds))]
     [(idC _) (error 'interp "AAQZ3 shouldn't get here got ~a" a )]))
  
 
@@ -274,7 +274,7 @@
 
 (check-exn #rx"Number of variables and arguments do not match"
            (lambda () (zip (list (numC 2) (numC 5)) (list (numC 8)))))
-(check-exn #rx"AAQZ3 found an unbound variable:" (lambda () (subst-id (idC 'test) '() '())))
+(check-exn #rx"AAQZ3 found an unbound variable:" (lambda () (subst-id (idC 'test) '())))
 (check-exn #rx"reference to undefined function" (lambda () (get-fundef (idC 'test2) '())))
 (check-exn #rx"interp: AAQZ3 shouldn't get here" (lambda () (interp (idC 'test3) '())))
 (check-exn #rx"syntax error in AAQZ3, got" (lambda () (parse "Testing")))
@@ -318,6 +318,30 @@
                      {def f3 {() => 5}}
                      {def main {() => {+ {f1 1 2 3 4 {f2 (f3) (f3)}} {f2 2 (f3)}}}}})
       -10)
-(check-exn #rx"Invalid identifier:" (lambda () (parse 'ifleq0?)))
+
+(check-equal?
+ (top-interp
+  '{{def f4 {(x y z) => {+ {f2 x y} {f3}}}}  ;; f2 used for multiplication
+    {def f5 {(x y) => {- {f2 x y} {f1 x y 3 4}}}}  ;; Binary operators with 2 args
+    {def f6 {(a b c d) => {* {+ a b} {f4 c d {f3}}}}} ;; Binary operators strictly between two arguments
+    {def f2 {(x y) => {* x y}}} ;; Only 2 args in f2
+    {def f1 {(x y z a) => {- {f2 {+ x y} z} {+ a z}}}} ;; Only 4 parameters for f1
+    {def f3 {() => 5}}  ;; Constant function returning 5
+    {def f7 {(a b) => {ifleq0? {f1 a b 1 2} {f4 5 6 {f3}} {f5 a b}}}} ;; Conditional using binary operators
+    {def main {() => 
+      {+ {- {+ {f6 10 20 {f3} {f5 2 {f7 {f6 10 20 {f5 2 {f7 {f3} {f7 2 3}}} {f2 {f3} {f4 2 3 4}}} 4}}}  
+         {f6 10 20 {f3} {f6 2 5 {f5 6 {f7 {f2 6 5} {f5 1 2}}}
+                            {f7 {f6 10 20 {f5 2 {f7 {f3} {f7 2 3}}} {f2 {f3} {f4 2 3 4}}} 4}}}}
+         {f6 10 20 {f3}
+             {f5 2 {f7 {f6 10 20 {f5 2 {f7 {f3}
+                                           {f7 6
+                                               {f1 {f1 {f1 2 3 4 5} {f2 {f2 3 4} 3} {f4 {f3} {f4 2 3 4} 3} 3} 3 3 4}}}}
+                           {f2 {f3} {f4 2 3 4}}} 4}}}}
+         {f6 10 20 {f3} {f5 2 {f7 {f6 10 20 {f5 2 {f7 {f3} {f7 2 3}}} {f2 {f3} {f4 2 3 4}}} 4}}}}}}}) -9554550) 
+
+
+(check-exn #rx"Invalid identifier:" (lambda () (parse 'ifleq0?)))`
 
 (check-equal? (top-interp (quote ((def main (() => (+ (f 13) (f 0)))) (def f ((qq) => (ifleq0? qq qq (+ qq 1))))))) 14)
+
+(top-interp '((def ignoreit ((x) => (/ 1 1))) (def main (() => (ignoreit (/ 1 (+ 0 0)))))))
