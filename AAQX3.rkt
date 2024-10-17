@@ -131,7 +131,7 @@
      (define right-val (interp r fds))
        (cond
          [(and (eq? op '/) (= right-val 0)) 
-          (error 'interp "AAQZ3 found division by zero!")] 
+          (error 'interp "Division by zero at runtime in AAQZ!")] ;; Check if dividing by zero
          [else 
           ((hash-ref op-table op) (interp l fds) right-val)])]
     [(ifleq0? test then else)
@@ -353,7 +353,17 @@
 
 (check-equal? (top-interp (quote ((def main (() => (+ (f 13) (f 0)))) (def f ((qq) => (ifleq0? qq qq (+ qq 1))))))) 14)
 
-(check-exn #rx"AAQZ3 found division by zero!" (lambda () (top-interp '((def ignoreit ((x) => 1))
-                                                                       (def main (() => (ignoreit (/ 1 (+ 0 0)))))))))
 
+
+
+
+
+(check-exn #rx"interp: Division by zero at runtime in AAQZ!" (lambda ()
+                                                               (top-interp '((def ignoreit ((x) => (/ x 1)))
+                                                                             (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
+(check-exn #rx"interp: Division by zero at runtime in AAQZ!" (lambda ()
+                                                               (top-interp '((def ignoreit ((x) => (/ 1 1)))
+                                                                             (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
+
+   
 
