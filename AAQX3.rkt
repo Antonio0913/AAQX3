@@ -21,7 +21,8 @@
     '/ /
     '- -))
 
-;;defining hash table for invalid identifier. These symbols cannot be made into functions because we use these in our language
+;;defining hash table for invalid identifier.
+;;These symbols cannot be made into functions because we use these in our language
 (define invalid-table
   (hash
    '+ 0
@@ -100,16 +101,18 @@
     [(cons prog rest)
      (check-duplicate-func (parse-fundef prog) (parse-prog rest))]))
 
-;;Takes in two lists of ExprC with the same length and returns a List of List of ExprC with each element containing the corresponding elements
-;;in the input list. If the lists are not equal in length, return an error.
+;;Takes in two lists of ExprC with the same length and returns a List of List of ExprC
+;;with each element containing the corresponding elements in the input list.
+;;If the lists are not equal in length, return an error.
 (define (zip [l1 : (Listof ExprC)] [l2 : (Listof ExprC)]) : (Listof (Listof ExprC))
   (match (list l1 l2)
     [(list '() '()) '()]
     [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
     [other (error 'zip "Number of variables and arguments do not match AAQZ3: ~a" other)]))
 
-;;Takes in a Listof Listof ExprC representing a zipped list containing function application values with their variable name,
-;;a Listof ExprC representing the args, and a Listof FuncdefC representing all the functions parsed.
+;;Takes in a Listof Listof ExprC representing a zipped list containing
+;;function application values with their variable name, a Listof ExprC representing the args,
+;;and a Listof FuncdefC representing all the functions parsed.
  (define (change-args [subs : (Listof (Listof ExprC))] [args : (Listof ExprC)]
                       [fds : (Listof FundefC)]) : (Listof ExprC)
    (match args 
@@ -130,8 +133,9 @@
          (subst-id s rest))]))
     ;;[(cons _ rest) (subst-id s rest fds)]))
 
-;;takes in a list of list of ExprC representing a list of substitutions, an ExprC 'in', and a list of function definitions.
-;;recursively substitutes identifiers in the ExprC 'in' with corresponding expression from the list of substitutions.
+;;takes in a list of list of ExprC representing a list of substitutions,
+;;an ExprC 'in', and a list of function definitions.
+;;Recursively substitutes identifiers in the ExprC 'in' with corresponding expression from the list of substitutions.
 ;;returns the ExprC with all the substitutions completed.
 (define (subst [subs : (Listof (Listof ExprC))] [in : ExprC] [fds : (Listof FundefC)]) : ExprC
   (match in
@@ -161,8 +165,8 @@
      (if (equal? (FundefC-name fun) (idC 'main)) fun (find-main rest))]))
 
 ;;Takes in a list of ExprC representing function arguments and a list of function definitions (fds).
-;;Recursively evaluates each argument, leaving numeric constants (numC) unchanged and calling interp other expressions.
-;;Returns a list of evaluated ExprC.
+;;Recursively evaluates each argument, leaving numeric constants (numC) unchanged
+;;and calling interp other expressions. Returns a list of evaluated ExprC.
 (define (interp-args [args : (Listof ExprC)] [fds : (Listof FundefC)]) : (Listof ExprC)
   (match args
     ['() '()]
@@ -348,12 +352,14 @@
 (check-exn #rx"Invalid identifier:" (lambda () (parse 'ifleq0?)))
 
 
-(check-exn #rx"interp: Division by zero at runtime in AAQZ!" (lambda ()
-                                                               (top-interp '((def ignoreit ((x) => (/ x 1)))
-                                                                             (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
-(check-exn #rx"interp: Division by zero at runtime in AAQZ!" (lambda ()
-                                                               (top-interp '((def ignoreit ((x) => (/ 1 1)))
-                                                                             (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
+(check-exn #rx"interp: Division by zero at runtime in AAQZ!"
+           (lambda ()
+             (top-interp '((def ignoreit ((x) => (/ x 1)))
+                           (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
+(check-exn #rx"interp: Division by zero at runtime in AAQZ!"
+           (lambda ()
+             (top-interp '((def ignoreit ((x) => (/ 1 1)))
+                           (def main (() => (/ (ignoreit (/ 1 0)) 0)))))))
 
 
    
