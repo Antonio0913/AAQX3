@@ -1,6 +1,21 @@
 #lang typed/racket
 (require typed/rackunit)
-;;Progress Statement: We did everything
+;;Progress Statement: We finished all of the parts of assignment three.
+;;We first started by pasting in some of the functions from the lab 3.
+;;We created the binopC struct first and used a hash table to map the
+;;symbols to its corresponding operation. We then extended the given
+;;parser and interpreter to accomodate this change. Function definitions,
+;;identifiers, and function applications. This was a pretty big change and we
+;;had some errors at first with this. We first started with the parser to accomodate
+;;these new parts of our AAQZ3 language. Then we started to work on the interpreter.
+;;The interpreter was difficult since we needed to find some way to substitute the arguments.
+;;The substitution took up the majority of our time. We had to debug a few issues with our
+;;implementation of substitution. We created helper functions for our main substitution function
+;;to help account for all cases where we would need to substitute. After this addition,
+;;most of the work was accounting for some unique cases such as division by 0, duplicate
+;;function names, invalid identifiers, and duplicate argument names. We created multiple
+;;helper functions. While accounting for edge cases, we realized we forgot to implement ifleq0?
+;;so we implemented that right away. We kept testing and fixed all the errors that we encountered.
 
 
 ;;defining the AAQZ3 language
@@ -33,32 +48,35 @@
    'ifleq0? 0
    '=> 0))
 
-;;takes in a function and a list of function definitions and throws an error if there is a repeat function name.
-;;Else adds the new function into the list of function definitions
-(define (check-duplicate-func [new : FundefC] [existing : (Listof FundefC)]) : (Listof FundefC)
-  (match existing
-    ['() (cons new existing)]
-    [(cons func rest)
-     (if (equal? (FundefC-name new) (FundefC-name func))
-         (error "AAQZ3 found a syntax error repeated function name\n")
-         (cons func (check-duplicate-func new rest)))]))
- 
-;;takes in a list of idC representing arguments and checks if there are any duplicate names for
-;;arguments in the given list using check-duplicate-arg-helper. Returns the list of arguments.
-(define (check-duplicate-arg [args : (Listof idC)]) : (Listof idC)
-  (match args
-    ['() '()]
-    [(cons first rest) (cons (check-duplicate-arg-helper first rest) (check-duplicate-arg rest))]))
+;;takes in an S-expression, parses it, then calls the interp-fns function to interpret it.
+(define (top-interp [funcs : Sexp])
+  (interp-fns (parse-prog funcs)))
 
-;;Takes in an idC called 'new' and a list of idC and checks whether 'new' is in the list of idC. Throws
-;;an error if new is found in the list of idC.
-(define (check-duplicate-arg-helper [new : idC] [existing : (Listof idC)]) : idC
-  (match existing
-    ['() new]
-    [(cons arg rest)
-     (if (equal? new arg)
-         (error "AAQZ3 found a syntax error repeated argument name\n")
-         (check-duplicate-arg-helper new rest))]))
+;;Takes a list of function, uses the find-main helper function to find the main function definition,
+;;then interprets the body of main using the interp function.
+(define (interp-fns [funs : (Listof FundefC)]) : Real
+  (interp (FundefC-body (find-main funs)) funs))
+
+;;Takes in an ExprC and a list of function definitions and converts the ExprC into a Real number.
+;;The list of function defn is used to match function applications to their corresponding definitions.
+(define (interp [a : ExprC] [fds : (Listof FundefC)]) : Real 
+  (match a
+    [(numC n) n]
+    [(binopC op l r)
+     (define right-val (interp r fds))
+       (cond
+         [(and (eq? op '/) (= right-val 0)) 
+          (error 'interp "Division by zero at runtime in AAQZ!")] ;; Check if dividing by zero
+         [else 
+          ((hash-ref op-table op) (interp l fds) right-val)])]
+    [(ifleq0? test then else)
+     (if (<= (interp test fds) 0)
+         (interp then fds)
+         (interp else fds))]
+    [(appC f a) (local ([define fd (get-fundef f fds)])
+              (interp (subst (zip (interp-args a fds) (FundefC-args fd))
+                             (FundefC-body fd) fds) fds))]
+    [(idC _) (error 'interp "AAQZ3 shouldn't get here got ~a" a )]))
 
 ;;takes in an S-expression and parses it into our AAQZ3 language in the form of an ExprC.
 ;;Checks for invalid syntaxes and invalid identifiers.
@@ -101,14 +119,56 @@
     [(cons prog rest)
      (check-duplicate-func (parse-fundef prog) (parse-prog rest))]))
 
-;;Takes in two lists of ExprC with the same length and returns a List of List of ExprC
-;;with each element containing the corresponding elements in the input list.
-;;If the lists are not equal in length, return an error.
-(define (zip [l1 : (Listof ExprC)] [l2 : (Listof ExprC)]) : (Listof (Listof ExprC))
-  (match (list l1 l2)
-    [(list '() '()) '()]
-    [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
-    [other (error 'zip "Number of variables and arguments do not match AAQZ3: ~a" other)]))
+;;takes in a list of list of ExprC representing a list of substitutions,
+;;an ExprC 'in', and a list of function definitions.
+;;Recursively substitutes identifiers in the ExprC 'in' with corresponding expression from the list of substitutions.
+;;returns the ExprC with all the substitutions completed.
+(define (subst [subs : (Listof (Listof ExprC))] [in : ExprC] [fds : (Listof FundefC)]) : ExprC
+  (match in
+  [(numC n) in]
+  [(idC s) (subst-id in subs)]
+  [(binopC op l r) (binopC op (subst subs l fds)
+                      (subst subs r fds))]
+  [(appC n a) (appC n (change-args subs a fds))]
+  [(ifleq0? con f1 f2) (ifleq0? (subst subs con fds) (subst subs f1 fds) (subst subs f2 fds))]))
+
+;;Takes in an idC 's' and a list of list of ExprC containing an expression and its corresponding idC.
+;;If the given idC 's' is in the list, return the corresponding expression. If its not found, throw an error
+(define (subst-id [s : idC] [subs : (Listof (Listof ExprC))]) : ExprC
+  (match subs
+    ['() (error 'subst-id (format "AAQZ3 found an unbound variable: ~a" s))]
+    [(cons (list what (? idC? for)) rest)
+     (if (equal? s for)
+         what
+         (subst-id s rest))]))
+    ;;[(cons _ rest) (subst-id s rest fds)]))
+
+;;takes in a function and a list of function definitions and throws an error if there is a repeat function name.
+;;Else adds the new function into the list of function definitions
+(define (check-duplicate-func [new : FundefC] [existing : (Listof FundefC)]) : (Listof FundefC)
+  (match existing
+    ['() (cons new existing)]
+    [(cons func rest)
+     (if (equal? (FundefC-name new) (FundefC-name func))
+         (error "AAQZ3 found a syntax error repeated function name\n")
+         (cons func (check-duplicate-func new rest)))]))
+ 
+;;takes in a list of idC representing arguments and checks if there are any duplicate names for
+;;arguments in the given list using check-duplicate-arg-helper. Returns the list of arguments.
+(define (check-duplicate-arg [args : (Listof idC)]) : (Listof idC)
+  (match args
+    ['() '()]
+    [(cons first rest) (cons (check-duplicate-arg-helper first rest) (check-duplicate-arg rest))]))
+
+;;Takes in an idC called 'new' and a list of idC and checks whether 'new' is in the list of idC. Throws
+;;an error if new is found in the list of idC.
+(define (check-duplicate-arg-helper [new : idC] [existing : (Listof idC)]) : idC
+  (match existing
+    ['() new]
+    [(cons arg rest)
+     (if (equal? new arg)
+         (error "AAQZ3 found a syntax error repeated argument name\n")
+         (check-duplicate-arg-helper new rest))]))
 
 ;;Takes in a Listof Listof ExprC representing a zipped list containing
 ;;function application values with their variable name, a Listof ExprC representing the args,
@@ -122,30 +182,23 @@
     [(cons other r)
      (cons (subst subs other fds) (change-args subs r fds))]))
 
-;;Takes in an idC 's' and a list of list of ExprC containing an expression and its corresponding idC.
-;;If the given idC 's' is in the list, return the corresponding expression. If its not found, throw an error
-(define (subst-id [s : idC] [subs : (Listof (Listof ExprC))]) : ExprC
-  (match subs
-    ['() (error 'subst-id (format "AAQZ3 found an unbound variable: ~a" s))]
-    [(cons (list what (? idC? for)) rest)
-     (if (equal? s for)
-         what
-         (subst-id s rest))]))
-    ;;[(cons _ rest) (subst-id s rest fds)]))
+;;Takes in a list of ExprC representing function arguments and a list of function definitions (fds).
+;;Recursively evaluates each argument, leaving numeric constants (numC) unchanged
+;;and calling interp other expressions. Returns a list of evaluated ExprC.
+(define (interp-args [args : (Listof ExprC)] [fds : (Listof FundefC)]) : (Listof ExprC)
+  (match args
+    ['() '()]
+    [(cons (? numC? a) r) (cons a (interp-args r fds))]
+    [(cons other r) (cons (numC (interp other fds)) (interp-args r fds))]))
 
-;;takes in a list of list of ExprC representing a list of substitutions,
-;;an ExprC 'in', and a list of function definitions.
-;;Recursively substitutes identifiers in the ExprC 'in' with corresponding expression from the list of substitutions.
-;;returns the ExprC with all the substitutions completed.
-(define (subst [subs : (Listof (Listof ExprC))] [in : ExprC] [fds : (Listof FundefC)]) : ExprC
-  (match in
-  [(numC n) in]
-  [(idC s) (subst-id in subs)]
-  [(binopC op l r) (binopC op (subst subs l fds)
-                      (subst subs r fds))]
-  [(appC n a) (appC n (change-args subs a fds))]
-  [(ifleq0? con f1 f2) (ifleq0? (subst subs con fds) (subst subs f1 fds) (subst subs f2 fds))])) 
-
+;;Takes in two lists of ExprC with the same length and returns a List of List of ExprC
+;;with each element containing the corresponding elements in the input list.
+;;If the lists are not equal in length, return an error.
+(define (zip [l1 : (Listof ExprC)] [l2 : (Listof ExprC)]) : (Listof (Listof ExprC))
+  (match (list l1 l2)
+    [(list '() '()) '()]
+    [(list (cons f1 r1) (cons f2 r2)) (cons (list f1 f2) (zip r1 r2))]
+    [other (error 'zip "Number of variables and arguments do not match AAQZ3: ~a" other)]))
 
 ;;Takes in an idC 'n' and a list of function definitions (fds), and returns the function definition
 ;;whose name matches the idC 'n'. If no match is found, it throws an error.
@@ -163,45 +216,6 @@
     ['() (error 'find-main "AAQZ3C cant find main :(")]
     [(cons fun rest)
      (if (equal? (FundefC-name fun) (idC 'main)) fun (find-main rest))]))
-
-;;Takes in a list of ExprC representing function arguments and a list of function definitions (fds).
-;;Recursively evaluates each argument, leaving numeric constants (numC) unchanged
-;;and calling interp other expressions. Returns a list of evaluated ExprC.
-(define (interp-args [args : (Listof ExprC)] [fds : (Listof FundefC)]) : (Listof ExprC)
-  (match args
-    ['() '()]
-    [(cons (? numC? a) r) (cons a (interp-args r fds))]
-    [(cons other r) (cons (numC (interp other fds)) (interp-args r fds))]))
-
-;;takes in an S-expression, parses it, then calls the interp-fns function to interpret it.
-(define (top-interp [funcs : Sexp])
-  (interp-fns (parse-prog funcs)))
-
-;;Takes a list of function, uses the find-main helper function to find the main function definition,
-;;then interprets the body of main using the interp function.
-(define (interp-fns [funs : (Listof FundefC)]) : Real
-  (interp (FundefC-body (find-main funs)) funs))
-
-;;Takes in an ExprC and a list of function definitions and converts the ExprC into a Real number.
-;;The list of function defn is used to match function applications to their corresponding definitions.
-(define (interp [a : ExprC] [fds : (Listof FundefC)]) : Real 
-  (match a
-    [(numC n) n]
-    [(binopC op l r)
-     (define right-val (interp r fds))
-       (cond
-         [(and (eq? op '/) (= right-val 0)) 
-          (error 'interp "Division by zero at runtime in AAQZ!")] ;; Check if dividing by zero
-         [else 
-          ((hash-ref op-table op) (interp l fds) right-val)])]
-    [(ifleq0? test then else)
-     (if (<= (interp test fds) 0)
-         (interp then fds)
-         (interp else fds))]
-    [(appC f a) (local ([define fd (get-fundef f fds)])
-              (interp (subst (zip (interp-args a fds) (FundefC-args fd))
-                             (FundefC-body fd) fds) fds))]
-    [(idC _) (error 'interp "AAQZ3 shouldn't get here got ~a" a )]))
 
 
 ;;-----TEST CASES!-----
@@ -345,7 +359,7 @@
         (parse-prog '{{def f1 {(x) => {+ x y}}} 
                      {def main {() => {f1 1 2}}}}))))
 
-(check-exn #rx"AAQZ found awrong function structure" (lambda () (interp-fns
+(check-exn #rx"AAQZ found a wrong function structure" (lambda () (interp-fns
         (parse-prog '{{def f1 {(x) => {+ x y}}} 
                      {def main {() => {f1 1 2} 2}}}))))
 
